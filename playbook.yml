@@ -1,0 +1,82 @@
+- hosts: localhost
+  connection: local
+  vars:
+    nodejs_npm_global_packages:
+        - name: yarn
+        - name: gulp
+        - name: bower
+  tasks:
+    
+    -   name: Check the version of CentOS
+        command: hostnamectl
+        register: os_check
+        ignore_errors: yes
+
+    -   name: Absent the Irrelevant files - Ubuntu 20
+        file:
+          path: /etc/apt/sources.list.d/ansible-ubuntu-ansible-focal.list
+          state: absent
+        when:
+          - os_check.stdout | regex_search("Ubuntu 20")
+    
+    -   name: Install Role MongoDB
+        local_action: command ansible-galaxy install -f undergreen.mongodb 
+
+    -   name: Install Role NodeJS
+        local_action: command ansible-galaxy install -f geerlingguy.nodejs 
+
+    -   name: Fetch MongoDB20.8 Role
+        git:
+            repo: https://ro:23EsdrLDWKtx1EsRvbMy@pwslab.org/ansible/mongodb-playbook.git
+            dest: /root/.ansible/roles/pwslab.mongodb20.8
+            version: master
+            force: yes
+
+    -   name: Check if MongoDB is already installed
+        stat: path=/usr/bin/mongo
+        register: mongo_exists
+
+    -   name: Check if NodeJS is already installed
+        stat: path=/usr/bin/node
+        register: node_exists
+
+    -   name: Applying role NodeJS
+        command: mv ~/.ansible/roles/geerlingguy.nodejs ~/.ansible/roles/pwslab.nodejs
+        when: not node_exists.stat.exists
+        ignore_errors: yes
+
+    -   name: Applying role MongoDB
+        command: mv ~/.ansible/roles/undergreen.mongodb ~/.ansible/roles/pwslab.mongodb18.7
+        when: not mongo_exists.stat.exists
+        ignore_errors: yes
+
+    -   name: Installing MongoDB18.7
+        include_role:
+            name: pwslab.mongodb18.7
+        when: 
+            - not mongo_exists.stat.exists
+            - os_check.stdout | regex_search("Ubuntu 18") or os_check.stdout | regex_search("CentOS Linux 7")
+
+    -   name: Installing MongoDB20.8
+        include_role:
+            name: pwslab.mongodb20.8
+        when: 
+            - not mongo_exists.stat.exists
+            - os_check.stdout | regex_search("Ubuntu 20") or os_check.stdout | regex_search("CentOS Linux 8")
+
+    -   name: Installing NodeJS
+        include_role:
+            name: pwslab.nodejs
+        when: not node_exists.stat.exists
+    
+    -   name: Fetch MEAN Repo
+        git:
+            repo: https://github.com/meanjs/mean.git
+            dest: /home/mean
+            version: master
+            force: yes
+
+    -   name: Update packages based on package.json to their latest version.
+        npm:
+            path: /home/mean
+            state: latest
